@@ -4,7 +4,10 @@ import httpx
 from starlette.config import Config
 from typing import List
 from pydantic import BaseModel
-
+import os
+from azure.ai.inference import ChatCompletionsClient
+from azure.ai.inference.models import SystemMessage, UserMessage
+from azure.core.credentials import AzureKeyCredential
 
 # Load environment variables
 config = Config('.env')
@@ -94,3 +97,25 @@ def read_items(valid: bool = Depends(validate)):
         Item.parse_obj({'id': 3, 'name': 'purple ellipse'}),
     ]
 
+
+
+endpoint = "https://models.inference.ai.azure.com"
+model_name = "DeepSeek-R1"
+token = os.environ["GITHUB_TOKEN"]
+
+@app.get('/ml')
+def capital_finder(valid: bool = Depends(validate)):
+    client = ChatCompletionsClient(
+        endpoint=endpoint,
+        credential=AzureKeyCredential(token),
+    )
+
+    response = client.complete(
+        messages=[
+            UserMessage("What is the capital of France?"),
+        ],
+        max_tokens=1000,
+        model=model_name
+    )
+
+    print(response.choices[0].message.content)
