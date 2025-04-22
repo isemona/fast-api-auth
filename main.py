@@ -6,6 +6,8 @@ import httpx
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer
+from fastapi.security.http import HTTPAuthorizationCredentials
 
 config = Config('.env')
 
@@ -25,13 +27,16 @@ app.add_middleware(
 )
 
 # Replace with your actual authorization server details
-AUTHORIZATION_SERVER_URL = config('OKTA_ISSUER')  # e.g., "https://your-auth-server.example.com"
+AUTHORIZATION_SERVER_URL = config('OKTA_ISSUER')  
 JWKS_ENDPOINT = f"{AUTHORIZATION_SERVER_URL}/v1/keys"
 SCOPES = ['read:messages']
 
 USE_INTROSPECTION = config('USE_INTROSPECTION', cast=bool, default=False)  # Flag to toggle introspection
 INTROSPECTION_ENDPOINT = f"{AUTHORIZATION_SERVER_URL}/v1/introspect"
 CLIENT_ID = config('OKTA_CLIENT_ID')  # Your OAuth client ID
+
+# Initialize the HTTPBearer scheme
+bearer_scheme = HTTPBearer()
 
 class User(BaseModel):
     sub: str
@@ -52,26 +57,21 @@ async def introspect_token(token: str, token_type_hint: str = "access_token") ->
             data={
                 "token": token,
                 "token_type_hint": token_type_hint,
-                "client_id": CLIENT_ID,  # Include the client_id in the request payload
+                "client_id": CLIENT_ID,  
             },
             headers={
-                "Content-Type": "application/x-www-form-urlencoded",  # Match the curl request
+                "Content-Type": "application/x-www-form-urlencoded",  
             },
         )
         response.raise_for_status()
         return response.json()
 
-async def verify_token(authorization: str = Header(None)) -> User:
-    """Verifies the incoming access token."""
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing"
-        )
+async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> User:
+    """Verifies the incoming access token using FastAPI's HTTPBearer."""
+    token = credentials.credentials  # Extract the token from the Authorization header
+    #print(f"Extracted token: {token}")
 
     try:
-        token = authorization.split("Bearer ")[1]
-        #print(f"Extracted token: {token}")
-
         if USE_INTROSPECTION:
             # Use introspection to validate the token
             introspection_result = await introspect_token(token)
@@ -94,21 +94,23 @@ async def verify_token(authorization: str = Header(None)) -> User:
         else:
             # Perform local verification
             jwks_data = await get_jwks()
-            #print(f"JWKS Data: {jwks_data}")
-
             rsa_key = None
             for key in jwks_data["keys"]:
                 rsa_key = JsonWebKey.import_key(key)
                 break
-            print(f"RSA Key: {rsa_key}")
+            # Print the RSA key in a readable format
+            #print(f"RSA Key: {rsa_key.as_dict()}")
 
+            # Decode the token
             payload = jwt.decode(
                 token, rsa_key, claims_options={"exp": {"essential": True}}
             )
-            #print(f"Decoded payload: {payload}")
 
+            # Print the decoded payload
+            #print(f"Decoded payload: {payload}")
+            
             # Validate the 'aud' claim
-            if payload.get("aud") != "api://default":  # Replace with your expected audience config('OKTA_CLIENT_ID')
+            if payload.get("aud") != config('OKTA_AUDIENCE'):  # Replace with your expected audience
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid audience"
                 )
@@ -122,7 +124,6 @@ async def verify_token(authorization: str = Header(None)) -> User:
                         status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired"
                     )
 
-            #print(f"Token scopes: {payload.get('scp', '')}")
             token_scopes = payload.get("scp", [])
             if not isinstance(token_scopes, list):
                 token_scopes = token_scopes.split()
