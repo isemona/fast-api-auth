@@ -14,8 +14,7 @@ This code sample demonstrates
 To run this example, run the following commands:
 
 ```shell
-git 
-cd 
+git clone -b oauth2-demo https://github.com/isemona/fast-api-auth.git
 pip install requirements.txt
 ```
 
@@ -36,6 +35,10 @@ You will need your Okta domain and Audience.
 Update .env with your Okta settings.
 
 ```
+OKTA_CLIENT_ID="your-client-id"
+OKTA_ISSUER="https://your-dev-org.okta.com/oauth2/default"
+OKTA_AUDIENCE="name-of-the-api-resource"
+USE_INTROSPECTION=false
 ```
 
 Start the app by running
