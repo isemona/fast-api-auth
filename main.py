@@ -115,6 +115,11 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid audience"
                 )
 
+            if payload.get("iss") != AUTHORIZATION_SERVER_URL:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid issuer"
+                )
+
             if "exp" in payload:
                 expiration = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
                 print(f"Token expiration time: {expiration}")
