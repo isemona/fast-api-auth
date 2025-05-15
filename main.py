@@ -100,18 +100,16 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
             for key in jwks_data["keys"]:
                 rsa_key = JsonWebKey.import_key(key)
                 break
-
             # Decode the token
             payload = jwt.decode(
                 token, rsa_key, claims_options={"exp": {"essential": True}}
             )
-            
             # Validate the 'aud' claim
             if payload.get("aud") != config('OKTA_AUDIENCE'):  
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid audience"
                 )
-
+            # Validate the 'iss' claim
             if payload.get("iss") != AUTHORIZATION_SERVER_URL:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid issuer"
@@ -135,14 +133,13 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
                 "username": payload.get("username", payload.get("preferred_username", payload["sub"])),
             }
 
-        # Validate required scopes
+        # Validate required scopes for both introspect and local validation
         for scope in SCOPES:
             if scope not in token_scopes:
                 print(f"Missing required scope: {scope}")
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient scope"
                 )
-
         # Returns a user object when all checks pass
         print(f"User data: {user_data}")
         return User(**user_data)
