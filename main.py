@@ -84,6 +84,8 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
                 "sub": introspection_result["sub"],
                 "username": introspection_result.get("username", introspection_result["sub"]),
             }
+            
+            # Get scopes
             token_scopes = introspection_result.get("scope", "").split()
 
             # Validate the 'aud' claim
@@ -98,16 +100,11 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
             for key in jwks_data["keys"]:
                 rsa_key = JsonWebKey.import_key(key)
                 break
-            # Print the RSA key in a readable format
-            # print(f"RSA Key: {rsa_key.as_dict()}")
 
             # Decode the token
             payload = jwt.decode(
                 token, rsa_key, claims_options={"exp": {"essential": True}}
             )
-
-            # Print the decoded payload
-            #print(f"Decoded payload: {payload}")
             
             # Validate the 'aud' claim
             if payload.get("aud") != config('OKTA_AUDIENCE'):  
@@ -119,7 +116,7 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid issuer"
                 )
-
+            # Validate the 'exp' claim
             if "exp" in payload:
                 expiration = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
                 print(f"Token expiration time: {expiration}")
@@ -128,7 +125,7 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired"
                     )
-
+            # Get scopes
             token_scopes = payload.get("scp", [])
             if not isinstance(token_scopes, list):
                 token_scopes = token_scopes.split()
