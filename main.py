@@ -33,7 +33,7 @@ SCOPES = ['read:messages']
 
 USE_INTROSPECTION = config('USE_INTROSPECTION', cast=bool, default=False)  # Flag to toggle introspection
 INTROSPECTION_ENDPOINT = f"{AUTHORIZATION_SERVER_URL}/v1/introspect"
-CLIENT_ID = config('OKTA_CLIENT_ID')  # Your OAuth client ID
+CLIENT_ID = config('OKTA_CLIENT_ID')  
 
 # Initialize the HTTPBearer scheme
 bearer_scheme = HTTPBearer()
@@ -69,7 +69,7 @@ async def introspect_token(token: str, token_type_hint: str = "access_token") ->
 async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> User:
     """Verifies the incoming access token using FastAPI's HTTPBearer."""
     token = credentials.credentials  # Extract the token from the Authorization header
-    #print(f"Extracted token: {token}")
+    # print(f"Extracted token: {token}")
 
     try:
         if USE_INTROSPECTION:
@@ -82,12 +82,12 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
             # Extract user data and scopes from introspection result
             user_data = {
                 "sub": introspection_result["sub"],
-                "username": introspection_result.get("username", "unknown"),
+                "username": introspection_result.get("username", introspection_result["sub"]),
             }
             token_scopes = introspection_result.get("scope", "").split()
 
             # Validate the 'aud' claim
-            if introspection_result.get("aud") != "api://default":  # Replace with your expected audience
+            if introspection_result.get("aud") != config('OKTA_AUDIENCE'):  # Replace with your expected audience
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid audience"
                 )
@@ -99,7 +99,7 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
                 rsa_key = JsonWebKey.import_key(key)
                 break
             # Print the RSA key in a readable format
-            #print(f"RSA Key: {rsa_key.as_dict()}")
+            # print(f"RSA Key: {rsa_key.as_dict()}")
 
             # Decode the token
             payload = jwt.decode(
@@ -110,7 +110,7 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
             #print(f"Decoded payload: {payload}")
             
             # Validate the 'aud' claim
-            if payload.get("aud") != config('OKTA_AUDIENCE'):  # Replace with your expected audience
+            if payload.get("aud") != config('OKTA_AUDIENCE'):  
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid audience"
                 )
@@ -135,7 +135,7 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
 
             user_data = {
                 "sub": payload["sub"],
-                "username": payload.get("username", payload.get("preferred_username", "unknown")),
+                "username": payload.get("username", payload.get("preferred_username", payload["sub"])),
             }
 
         # Validate required scopes
@@ -146,6 +146,7 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
                     status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient scope"
                 )
 
+        # Returns a user object when all checks pass
         print(f"User data: {user_data}")
         return User(**user_data)
 
